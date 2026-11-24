@@ -1,0 +1,17 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv && uv pip install -e ".[dev]"
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+      - name: Wheel ships the SQL reports
+        run: |
+          uv build --wheel
+          python -c "import glob, zipfile; names = zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist(); missing = [n for n in ('diabetes_cohort', 'medication_safety', 'noshow_summary') if not any(x.endswith(n + '.sql') for x in names)]; assert not missing, missing"
