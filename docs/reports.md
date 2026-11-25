@@ -46,8 +46,9 @@ indications. Tests done elsewhere will make a patient look unmonitored.
 
 **Question.** How many scheduled appointments were fulfilled, missed or cancelled each month?
 
-**Measure.** Count by status per calendar month over the last `months` (default 12) up to the report
-date. `noshow_rate_pct` = no-shows / all scheduled (cancelled appointments stay in the
+**Measure.** Count by status per calendar month over the last `months` (default 12) *complete*
+months before the report date's month (as of 2026-11-15 with `months=12`: 2025-11 to 2026-10), so
+no month is partial. `noshow_rate_pct` = no-shows / all scheduled (cancelled appointments stay in the
 denominator).
 
 **Limitations.** Synthea has no scheduling data. The `appointments` table is a synthetic extension
@@ -68,4 +69,11 @@ FROM patients GROUP BY 1 ORDER BY 1;
 
 Header lines: `title`, `question`, `key` (a column that uniquely identifies each row, used for the
 change diff) are required. Optional: `requires` (tables), `summary` (a column to count in the
-Summary sheet), `limitations`, and `param name: default` for each extra parameter.
+Summary sheet), `limitations`, `diff_ignore` (comma-separated columns the change diff should
+ignore, e.g. `age, days_since_test`, which move every day by themselves), and `param name: default`
+for each extra parameter.
+
+The key column is checked on every run: if it is missing or not unique the run stops with an
+error. A parameter whose default is a whole number only accepts whole numbers >= 0, and
+`--param` names that no selected report declares are rejected, so a typo can't fall back to the
+default silently.

@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from . import __version__
-from .catalog import load_reports, run_report
+from .catalog import check_overrides, load_reports, run_report
 from .db import DataError, load_csv_dir
 from .history import History
 from .pdf import write_pdf
@@ -80,7 +80,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if not sep:
             print(f"--param needs KEY=VALUE, got {item!r}", file=sys.stderr)
             return 2
-        overrides[key] = value
+        overrides[key.strip()] = value
+    check_overrides(selected, overrides)
     formats = {f.strip().lower() for f in args.formats.split(",") if f.strip()}
     unknown = formats - {"xlsx", "pdf"}
     if unknown:

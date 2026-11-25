@@ -126,3 +126,49 @@ def test_custom_reports_directory(tmp_path, data_dir):
     reports = load_reports(tmp_path)
     result = run_report(load_csv_dir(data_dir), reports["mine"], AS_OF)
     assert result.rows == [(6,)]
+
+
+# ---- parameter, key and window checks ------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad", ["abc", "-5", "3.5", ""])
+def test_non_integer_parameter_is_an_error_not_a_silent_change(data_dir, bad):
+    with pytest.raises(DataError, match="window_days"):
+        run(data_dir, "diabetes_cohort", window_days=bad)
+
+
+def test_unknown_parameter_is_rejected():
+    from report_kit.catalog import check_overrides
+
+    reports = load_reports()
+    with pytest.raises(DataError, match="window_day"):
+        check_overrides(reports, {"window_day": "30"})
+    check_overrides(reports, {"window_days": "30", "months": "6"})  # both declared somewhere
+
+
+def test_custom_report_with_missing_or_duplicate_key(tmp_path, data_dir):
+    (tmp_path / "missing.sql").write_text(
+        "-- title: T\n-- question: Q\n-- key: nope\nSELECT id FROM patients;"
+    )
+    (tmp_path / "dupes.sql").write_text(
+        "-- title: T\n-- question: Q\n-- key: gender\nSELECT gender FROM patients;"
+    )
+    reports, conn = load_reports(tmp_path), load_csv_dir(data_dir)
+    with pytest.raises(DataError, match="not in the results"):
+        run_report(conn, reports["missing"], AS_OF)
+    with pytest.raises(DataError, match="not unique"):
+        run_report(conn, reports["dupes"], AS_OF)
+
+
+def test_age_is_exact_around_birthdays(data_dir):
+    rows = by(run(data_dir, "diabetes_cohort", as_of=date(2026, 6, 14)))
+    assert rows["p2"]["age"] == 75  # born 1950-06-15: turns 76 tomorrow
+    rows = by(run(data_dir, "diabetes_cohort", as_of=date(2026, 6, 15)))
+    assert rows["p2"]["age"] == 76
+
+
+def test_noshow_uses_whole_months_only(data_dir):
+    rows = by(run(data_dir, "noshow_summary", as_of=date(2026, 11, 20)), key="month")
+    assert set(rows) == {"2026-10"}  # 2026-11 is the current, incomplete month
+    rows = by(run(data_dir, "noshow_summary", as_of=date(2026, 11, 20), months="1"), key="month")
+    assert rows["2026-10"]["scheduled"] == 6

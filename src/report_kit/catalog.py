@@ -22,6 +22,9 @@ class Report:
     summary: str | None = None
     limitations: str = ""
     params: dict[str, str] = field(default_factory=dict)
+    # Columns derived from the report date (age, days since...). They change on every run, so
+    # the "what changed since last run" diff ignores them.
+    diff_ignore: tuple[str, ...] = ()
 
 
 @dataclass
@@ -61,6 +64,7 @@ def parse_report(name: str, text: str) -> Report:
         summary=meta.get("summary"),
         limitations=meta.get("limitations", ""),
         params=params,
+        diff_ignore=tuple(c.strip() for c in meta.get("diff_ignore", "").split(",") if c.strip()),
     )
 
 
@@ -92,11 +96,54 @@ def run_report(
         )
     params: dict[str, object] = {"as_of": as_of.isoformat()}
     for key, default in report.params.items():
-        raw = (overrides or {}).get(key, default)
-        try:
-            params[key] = int(raw)
-        except ValueError:
-            params[key] = raw
+        params[key] = _param_value(report, key, default, (overrides or {}).get(key))
     cursor = conn.execute(report.sql, params)
     columns = [d[0] for d in cursor.description]
-    return Result(report, columns, cursor.fetchall(), params, run_at or datetime.now(timezone.utc))
+    rows = cursor.fetchall()
+    _check_key(report, columns, rows)
+    return Result(report, columns, rows, params, run_at or datetime.now(timezone.utc))
+
+
+def _param_value(report: Report, key: str, default: str, override: str | None) -> object:
+    """Integer defaults need non-negative integer overrides. A bad value is an error, never a
+    silent fallback: in SQL a non-number quietly turns date arithmetic into NULL."""
+    try:
+        int(default)
+    except ValueError:
+        return default if override is None else override
+    raw = default if override is None else override.strip()
+    if not raw.isdigit():
+        raise DataError(
+            f"Report {report.name!r}: parameter {key!r} must be a whole number >= 0, got {raw!r}"
+        )
+    return int(raw)
+
+
+def _check_key(report: Report, columns: list[str], rows: list[tuple]) -> None:
+    """The key column identifies rows for the run-to-run diff, so it must exist and be unique."""
+    if report.key not in columns:
+        raise DataError(
+            f"Report {report.name!r}: key column {report.key!r} is not in the results "
+            f"(columns: {', '.join(columns)})"
+        )
+    idx = columns.index(report.key)
+    seen: set[str] = set()
+    for row in rows:
+        value = str(row[idx])
+        if value in seen:
+            raise DataError(
+                f"Report {report.name!r}: key {report.key!r} is not unique "
+                f"(value {value!r} appears more than once)"
+            )
+        seen.add(value)
+
+
+def check_overrides(reports: dict[str, Report], overrides: dict[str, str]) -> None:
+    """Every --param must be declared by at least one selected report (catches typos)."""
+    known = {k for r in reports.values() for k in r.params}
+    unknown = sorted(set(overrides) - known)
+    if unknown:
+        raise DataError(
+            f"Unknown parameter(s): {', '.join(unknown)}. "
+            f"These reports accept: {', '.join(sorted(known)) or 'no parameters'}"
+        )

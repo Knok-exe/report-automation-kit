@@ -18,6 +18,15 @@ HEADER_FONT = Font(bold=True, color="FFFFFF")
 BANNER = "SYNTHETIC DATA ONLY. Educational demo, not clinical decision support."
 
 
+def _as_text(ws) -> None:
+    """openpyxl writes any string starting with '=' as a live formula. Data values must never
+    run as formulas (CSV/formula injection), so force those cells back to plain text."""
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.data_type == "f":
+                cell.data_type = "s"
+
+
 def _autosize(ws, rows: list[list], minimum: int = 10, maximum: int = 48) -> None:
     for idx in range(1, max((len(r) for r in rows), default=0) + 1):
         width = max(
@@ -93,6 +102,7 @@ def write_xlsx(result: Result, diff: Diff | None, first_run: bool, path: str | P
         data.append(list(r))
     for cell in data[1]:
         cell.fill, cell.font = HEADER_FILL, HEADER_FONT
+    _as_text(data)
     data.freeze_panes = "A2"
     if result.rows:
         ref = f"A1:{get_column_letter(len(result.columns))}{len(result.rows) + 1}"
@@ -116,6 +126,7 @@ def write_xlsx(result: Result, diff: Diff | None, first_run: bool, path: str | P
             changes.append(["Changed", key, detail])
     elif first_run:
         changes.append(["", "", "First run, nothing to compare against."])
+    _as_text(changes)
     changes.column_dimensions["A"].width = 12
     changes.column_dimensions["B"].width = 40
     changes.column_dimensions["C"].width = 90
