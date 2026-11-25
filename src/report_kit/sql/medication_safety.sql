@@ -1,6 +1,7 @@
 -- title: Medication safety: metformin without recent renal function test
 -- question: Which patients on active metformin have no creatinine or eGFR result in the lookback window?
 -- key: patient_id
+-- diff_ignore: age, days_since_test
 -- requires: patients, medications, observations
 -- param window_days: 365
 -- limitations: Illustrative monitoring rule, not a clinical guideline. Creatinine LOINC 2160-0 and eGFR LOINC 62238-1 / 33914-3 count as renal function tests. Metformin = RxNorm 861007, 860975, 861004. A patient with the test recorded in another system will appear here. Synthetic data.
@@ -20,7 +21,8 @@ last_test AS (
 )
 SELECT m.patient_id,
        p."first" || ' ' || p."last" AS name,
-       CAST((julianday(:as_of) - julianday(p.birthdate)) / 365.25 AS INTEGER) AS age,
+       (CAST(strftime('%Y', :as_of) AS INTEGER) - CAST(strftime('%Y', p.birthdate) AS INTEGER)
+        - (strftime('%m-%d', :as_of) < strftime('%m-%d', p.birthdate))) AS age,
        m.medication,
        m.med_start,
        t.last_renal_test,

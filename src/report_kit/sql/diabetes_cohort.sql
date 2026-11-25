@@ -2,6 +2,7 @@
 -- question: Among patients with active diabetes, who has a recent HbA1c and is it in control?
 -- key: patient_id
 -- summary: control_status
+-- diff_ignore: age
 -- requires: patients, conditions, observations
 -- param window_days: 365
 -- limitations: Illustrative thresholds (<7 in control, 7 to <9 above goal, >=9 poor), not individualised targets. Uses only the most recent HbA1c on or before the report date. Diabetes = SNOMED 44054006, 46635009 or 73211009 with no end date. Synthetic data.
@@ -20,7 +21,8 @@ ranked AS (
 )
 SELECT d.patient_id,
        p."first" || ' ' || p."last" AS name,
-       CAST((julianday(:as_of) - julianday(p.birthdate)) / 365.25 AS INTEGER) AS age,
+       (CAST(strftime('%Y', :as_of) AS INTEGER) - CAST(strftime('%Y', p.birthdate) AS INTEGER)
+        - (strftime('%m-%d', :as_of) < strftime('%m-%d', p.birthdate))) AS age,
        r.a1c_date,
        r.a1c_value,
        CASE

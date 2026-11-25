@@ -55,15 +55,18 @@ class History:
         previous = json.loads(row[2])
         current = _rows(result)
         diff = Diff(previous_run_at=row[0], previous_as_of=row[1])
+        ignore = set(result.report.diff_ignore)
         diff.added = [current[k] for k in current if k not in previous]
         diff.removed = [previous[k] for k in previous if k not in current]
         for key in current:
-            if key in previous and current[key] != previous[key]:
-                delta = {
-                    c: (previous[key].get(c), v)
-                    for c, v in current[key].items()
-                    if previous[key].get(c) != v
-                }
+            if key not in previous:
+                continue
+            delta = {
+                c: (previous[key].get(c), v)
+                for c, v in current[key].items()
+                if c not in ignore and previous[key].get(c) != v
+            }
+            if delta:
                 diff.changed.append((key, delta))
         return diff
 

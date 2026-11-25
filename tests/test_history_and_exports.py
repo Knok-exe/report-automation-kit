@@ -113,3 +113,22 @@ def test_pdf_is_valid_and_mentions_title(data_dir, tmp_path):
 def test_pdf_with_zero_rows_and_many_rows(data_dir, tmp_path):
     empty = make_result(data_dir, as_of=date(2000, 1, 1))
     assert write_pdf(empty, None, True, tmp_path / "e.pdf").read_bytes().startswith(b"%PDF")
+
+
+def test_date_derived_columns_do_not_count_as_changes(data_dir, tmp_path):
+    history = History(tmp_path / "h.db")
+    history.record(make_result(data_dir, "medication_safety", date(2026, 11, 1)))
+    later = make_result(data_dir, "medication_safety", date(2026, 11, 2))
+    assert later.report.diff_ignore == ("age", "days_since_test")
+    assert history.diff_against_last(later).is_empty  # only days_since_test moved
+
+
+def test_excel_never_turns_data_into_formulas(data_dir, tmp_path):
+    (data_dir / "patients.csv").write_text(
+        (data_dir / "patients.csv").read_text().replace("Ann,One", '"=HYPERLINK(""x"")",One')
+    )
+    path = write_xlsx(make_result(data_dir), None, True, tmp_path / "r.xlsx")
+    sheet = openpyxl.load_workbook(path)["Data"]
+    names = [c.value for c in sheet["B"]]
+    cell = next(c for c in sheet["B"] if str(c.value).startswith("="))
+    assert cell.data_type == "s" and any("HYPERLINK" in str(n) for n in names)

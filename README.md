@@ -77,7 +77,7 @@ schtasks /Create /SC MONTHLY /D 1 /ST 06:00 /TN "report-kit" /TR "cmd /c cd /d D
 pytest
 ```
 
-30 tests run the SQL against a tiny hand-built database where every expected answer can be checked
+40 tests run the SQL against a tiny hand-built database where every expected answer can be checked
 by eye: cohort membership, "latest result, not worst", threshold boundaries (exactly 7.0 and 9.0),
 the lookback-window edge, results dated after the report date being ignored, stopped medications,
 resolved conditions, the diff (added / removed / changed), the Excel and PDF structure (including
